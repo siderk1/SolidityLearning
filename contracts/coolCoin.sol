@@ -3,11 +3,11 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract NiggaCoin is IERC20 {
+contract CoolCoin is IERC20 {
 
     uint256 private _totalSupply;
-    string private _name = "NiggaCoin";
-    string private _symbol = "NIGG";
+    string private _name = "CoolCoin";
+    string private _symbol = "COOL";
     uint8 private _decimals = 18;
 
     mapping(address => uint256) private _balances;
@@ -39,8 +39,7 @@ contract NiggaCoin is IERC20 {
         return _balances[account];
     }
 
-    function transfer(address to, uint256 amount) external override returns (bool) {
-        require(to != address(0), "Zero address");
+    function _transfer(address to, uint256 amount) internal virtual returns (bool) {
         require(_balances[msg.sender] >= amount, "Insufficient balance");
 
         unchecked {
@@ -52,13 +51,15 @@ contract NiggaCoin is IERC20 {
         return true;
     }
 
+    function transfer(address to, uint256 amount) external override returns (bool) {
+        return _transfer(to, amount);
+    }
+
     function allowance(address owner, address spender) external view override returns (uint256) {
         return _allowances[owner][spender];
     }
 
     function approve(address spender, uint256 amount) external override returns (bool) {
-        require(spender != address(0), "Can not approve 0 address");
-
         uint256 current = _allowances[msg.sender][spender];
         require(amount == 0 || current == 0, "Should be set to 0 first");
 
@@ -68,23 +69,17 @@ contract NiggaCoin is IERC20 {
     }
 
     function transferFrom(address from, address to, uint256 amount) external override returns (bool) {
-        require(from != address(0) && to != address(0), "Zero address");
         require(_allowances[from][msg.sender] >= amount, "Insufficient allowance");
-        require(_balances[from] >= amount, "Insufficient balance");
 
+        _transfer(to, amount);
         unchecked {
-            _balances[from] -= amount;
-            _balances[to] += amount;
             _allowances[from][msg.sender] -= amount;
         }
 
-        emit Transfer(from, to, amount);
         return true;
     }
 
      function _mint(address to, uint256 amount) internal virtual {
-        require(to != address(0), "Mint to the zero address");
-
         _totalSupply += amount;
         _balances[to] += amount;
 

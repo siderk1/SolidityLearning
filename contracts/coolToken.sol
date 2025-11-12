@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
+contract CoolToken is IERC20, Ownable, ReentrancyGuard {
     uint256 public timeToVote;
     bool public isVotingInProgress;
     uint256 public currentPrice;
@@ -16,7 +16,7 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
     uint256 public lastFeeBurn;
 
     uint256 private _totalSupply;
-    string private _name = "CoolCoin";
+    string private _name = "CoolToken";
     string private _symbol = "COOL";
     uint8 private _decimals = 18;
     
@@ -92,7 +92,7 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount) external override returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) external override notDuringVotingIfVoted returns (bool) {
         require(_allowances[from][msg.sender] >= amount, "Insufficient allowance");
 
         _transfer(from, to, amount);
@@ -109,7 +109,7 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         _feeBps = newFeeBps;
     }
 
-    function _moveFunds(address from, address to, uint256 amount) internal {
+    function _moveFunds(address from, address to, uint256 amount) internal virtual {
         if (from == address(0)){
             _totalSupply += amount;
         } else {
@@ -145,11 +145,9 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
     }
 
     function buy() external payable notDuringVotingIfVoted {
-        require(msg.value > 0);
         uint256 tokensGross = msg.value * (10 ** _decimals) / currentPrice;
         uint256 fee = tokensGross * _feeBps / BPS_DENOMINATOR;
         uint256 tokensNet = tokensGross - fee;
-        require(tokensNet > 0);
         _mint(address(this), fee);
         feeTokensAccrued += fee;
         _mint(msg.sender, tokensNet);
@@ -158,7 +156,6 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
     }
 
     function sell(uint256 tokensAmount) external nonReentrant notDuringVotingIfVoted {
-        require(tokensAmount > 0, "Zero amount");
         require(_balances[msg.sender] >= tokensAmount, "Insufficient balance");
         require(currentPrice > 0, "Price not set");
 
@@ -168,7 +165,6 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         uint256 ethOut = tokensNet * currentPrice / (10 ** _decimals);
         require(address(this).balance >= ethOut);
         
-
         _transfer(msg.sender, address(this), fee);
         feeTokensAccrued += fee;
         _burn(msg.sender, tokensNet);
@@ -183,12 +179,6 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         require(block.timestamp >= lastFeeBurn + 7 days, "Too early");
 
         uint256 toBurn = feeTokensAccrued;
-        if (toBurn == 0) {
-            lastFeeBurn = block.timestamp;
-            emit FeeBurned(0, block.timestamp);
-            return;
-        }
-
         uint256 bal = _balances[address(this)];
         if (toBurn > bal) {
             toBurn = bal; 

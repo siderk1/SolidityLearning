@@ -12,7 +12,9 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
     uint256 private _feeBps;
     uint256 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant MAX_FEE_BPS = 1000;
-    
+    uint256 public feeTokensAccrued;
+    uint256 public lastFeeBurn;
+
     uint256 private _totalSupply;
     string private _name = "CoolCoin";
     string private _symbol = "COOL";
@@ -44,6 +46,8 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         timeToVote = timeToVote_;
         currentPrice = currentPrice_;
         _feeBps = feeBps_;
+        lastFeeBurn = block.timestamp;
+
     }
 
     function name() public view returns (string memory) {
@@ -147,6 +151,7 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         uint256 tokensNet = tokensGross - fee;
         require(tokensNet > 0);
         _mint(address(this), fee);
+        feeTokensAccrued += fee;
         _mint(msg.sender, tokensNet);
 
         emit Buy(msg.sender, msg.value, tokensNet, fee, currentPrice);
@@ -165,11 +170,34 @@ contract CoolCoin is IERC20, Ownable, ReentrancyGuard {
         
 
         _transfer(msg.sender, address(this), fee);
+        feeTokensAccrued += fee;
         _burn(msg.sender, tokensNet);
 
         (bool sent, ) = msg.sender.call{value: ethOut}("");
         require(sent, "ETH transfer failed");
 
         emit Sell(msg.sender, tokensAmount, ethOut, fee, currentPrice);
+    }
+
+    function burnFees() external {
+        require(block.timestamp >= lastFeeBurn + 7 days, "Too early");
+
+        uint256 toBurn = feeTokensAccrued;
+        if (toBurn == 0) {
+            lastFeeBurn = block.timestamp;
+            emit FeeBurned(0, block.timestamp);
+            return;
+        }
+
+        uint256 bal = _balances[address(this)];
+        if (toBurn > bal) {
+            toBurn = bal; 
+        }
+
+        feeTokensAccrued -= toBurn;
+        lastFeeBurn = block.timestamp;
+
+        _burn(address(this), toBurn);
+        emit FeeBurned(toBurn, block.timestamp);
     }
 }

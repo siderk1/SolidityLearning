@@ -118,7 +118,7 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
         emit VotingStarted(votingNumber, votingStartedTime);
     }
 
-    function vote(uint256 price) external {
+    function vote(uint256 price) external notDuringVotingIfVoted {
         require(isVotingInProgress, "No active voting");
         require(block.timestamp <= votingStartedTime + votingTimeLength, "Voting period over");
         require(price > 0, "Price must be > 0"); 
@@ -158,8 +158,6 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
 
         emit VotingEnded(votingNumber, leadingPrice, leadingPriceVotes);
     }
-
-
 
     function approve(address spender, uint256 amount) external override returns (bool) {
         uint256 current = _allowances[msg.sender][spender];

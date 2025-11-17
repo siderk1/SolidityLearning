@@ -6,12 +6,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract CoolToken is IERC20, Ownable, ReentrancyGuard {
-    uint256 public timeToVote;
-    bool public isVotingInProgress;
     uint256 public currentPrice;
     uint256 private _feeBps;
     uint256 public constant BPS_DENOMINATOR = 10_000;
-    uint256 public constant MAX_FEE_BPS = 1000;
+    uint256 public constant MAX_FEE_BPS = 1000; // 10%
     uint256 public feeTokensAccrued;
     uint256 public lastFeeBurn;
 
@@ -19,23 +17,44 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
     string private _name = "CoolToken";
     string private _symbol = "COOL";
     uint8 private _decimals = 18;
-    
+
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
+
+    // Voting state
+
+    uint256 public votingTimeLength;
+    bool public isVotingInProgress;
+    uint256 public votingNumber;
+    uint256 public votingStartedTime;
+
+    uint256 public leadingPrice;
+    uint256 public leadingPriceVotes;
+
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    mapping(uint256 => mapping(uint256 => uint256)) public priceVotes;
+
 
     event FeeUpdated(uint256 currentFeeBps, uint256 newFeeBps);
     event Buy(address buyer, uint256 ethIn, uint256 tokensOut, uint256 feeTokens, uint256 price);
     event Sell(address seller, uint256 tokensIn, uint256 ethOut, uint256 feeTokens, uint256 price);
     event FeeBurned(uint256 amount, uint256 timestamp);
 
+    event VotingStarted(uint256 indexed votingNumber, uint256 startTime);
+    event Voted(address indexed voter, uint256 indexed votingNumber, uint256 price, uint256 votingPower);
+    event VotingEnded(uint256 indexed votingNumber, uint256 winningPrice, uint256 totalVotingPower);
 
     modifier notDuringVotingIfVoted () {
+        if (isVotingInProgress && hasVoted[votingNumber][msg.sender]) {
+            revert("Action forbidden for voters during active voting");
+        }
         _;
     }
+
     constructor (
         string memory name_,
         string memory symbol_,
-        uint256 timeToVote_,
+        uint256 votingTimeLength_,
         uint256 currentPrice_,
         uint256 feeBps_
     ) 
@@ -43,7 +62,7 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
     {
         _name = name_;
         _symbol = symbol_;
-        timeToVote = timeToVote_;
+        votingTimeLength = votingTimeLength_;
         currentPrice = currentPrice_;
         _feeBps = feeBps_;
         lastFeeBurn = block.timestamp;
@@ -83,6 +102,65 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
         return _allowances[owner][spender];
     }
 
+    function startVoting() external {
+        require(!isVotingInProgress, "Voting already in progress");
+
+        uint256 minToStart = (_totalSupply * 10) / BPS_DENOMINATOR; // 10 bps = 0.1%
+        require(_balances[msg.sender] > minToStart, "Not enough tokens to start voting");
+
+        isVotingInProgress = true;
+        votingNumber += 1;
+        votingStartedTime = block.timestamp;
+
+        leadingPrice = 0;
+        leadingPriceVotes = 0;
+
+        emit VotingStarted(votingNumber, votingStartedTime);
+    }
+
+    function vote(uint256 price) external {
+        require(isVotingInProgress, "No active voting");
+        require(block.timestamp <= votingStartedTime + votingTimeLength, "Voting period over");
+        require(price > 0, "Price must be > 0"); 
+
+        uint256 currentVoting = votingNumber;
+
+        require(!hasVoted[currentVoting][msg.sender], "Already voted");
+
+        uint256 balance = _balances[msg.sender];
+        require(balance > 0, "No tokens");
+
+        uint256 minToVote = (_totalSupply * 5) / BPS_DENOMINATOR; // 5 bps = 0.05%
+        require(balance >= minToVote, "Not enough tokens to vote");
+
+        hasVoted[currentVoting][msg.sender] = true;
+
+        uint256 newTotalVotesForPrice = priceVotes[currentVoting][price] + balance;
+        priceVotes[currentVoting][price] = newTotalVotesForPrice;
+
+        if (newTotalVotesForPrice > leadingPriceVotes) {
+            leadingPriceVotes = newTotalVotesForPrice;
+            leadingPrice = price;
+        }
+
+        emit Voted(msg.sender, currentVoting, price, balance);
+    }
+
+    function endVoting() external {
+        require(isVotingInProgress, "No active voting");
+        require(block.timestamp >= votingStartedTime + votingTimeLength, "Voting still in progress");
+
+        isVotingInProgress = false;
+
+        if (leadingPriceVotes > 0) {
+            currentPrice = leadingPrice;
+        }
+
+        emit VotingEnded(votingNumber, leadingPrice, leadingPriceVotes);
+    }
+
+
+
     function approve(address spender, uint256 amount) external override returns (bool) {
         uint256 current = _allowances[msg.sender][spender];
         require(amount == 0 || current == 0, "Should be set to 0 first");
@@ -109,7 +187,7 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
         _feeBps = newFeeBps;
     }
 
-    function _moveFunds(address from, address to, uint256 amount) internal virtual {
+    function _update(address from, address to, uint256 amount) internal virtual {
         if (from == address(0)){
             _totalSupply += amount;
         } else {
@@ -133,15 +211,17 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
 
     function _transfer(address from, address to, uint256 amount) internal {
         require(from != address(0) && to != address(0));
-        _moveFunds(from, to, amount);
+        _update(from, to, amount);
     }
 
     function _mint(address account, uint256 amount) internal {
-        _moveFunds(address(0), account, amount);
+        require(account != address(0));
+        _update(address(0), account, amount);
     }
 
     function _burn(address account, uint256 amount) internal {
-       _moveFunds(account, address(0), amount);
+        require(account != address(0));
+       _update(account, address(0), amount);
     }
 
     function buy() external payable notDuringVotingIfVoted {
@@ -181,7 +261,7 @@ contract CoolToken is IERC20, Ownable, ReentrancyGuard {
         uint256 toBurn = feeTokensAccrued;
         uint256 bal = _balances[address(this)];
         if (toBurn > bal) {
-            toBurn = bal; 
+            toBurn = bal;
         }
 
         feeTokensAccrued -= toBurn;

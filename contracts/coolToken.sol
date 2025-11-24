@@ -247,7 +247,7 @@ contract CoolToken is
         if (isVotingInProgress) revert NoActiveVoting();
 
         uint256 tokensToClaim = tokensStaked[account];
-        _update(address(this), account, tokensToClaim);
+        _transfer(address(this), account, tokensToClaim);
         tokensStaked[account] = 0;
 
         uint256 tip = stakingClaimTips[account];

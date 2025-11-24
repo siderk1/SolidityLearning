@@ -256,7 +256,8 @@ contract CoolToken is
             (bool sent, ) = msg.sender.call{value: tip}("");
             if (!sent) revert ETHTransferFailed();
         }
-            emit Claimed(msg.sender, account, tokensToClaim, tip);
+        
+        emit Claimed(msg.sender, account, tokensToClaim, tip);
         }
 
     function endVoting() external {

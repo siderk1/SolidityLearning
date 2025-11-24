@@ -15,6 +15,23 @@ contract CoolToken is
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
+    // ---- Errors ----
+    error VotingAlreadyInProgress();
+    error NotEnoughTokensToStartVoting();
+    error NoActiveVoting();
+    error VotingPeriodOver();
+    error PriceMustBeGreaterThanZero();
+    error NotEnoughTokens();
+    error NotEnoughTokensToVote();
+    error ZeroAddress();
+    error InsufficientAllowance();
+    error InsufficientBalance();
+    error MaxFeeExceeded();
+    error ETHTransferFailed();
+    error TooEarlyToBurnFees();
+    error PriceNotSet();
+    error VotingStillInProgress();
+
     uint256 public currentPrice;
     uint256 private _feeBps;
     uint256 public constant BPS_DENOMINATOR = 10_000;
@@ -39,9 +56,9 @@ contract CoolToken is
     uint256 public leadingPrice;
     uint256 public leadingPriceVotes;
 
-    mapping(uint256 => mapping(address => bool)) public hasVoted;
     mapping(uint256 => mapping(uint256 => uint256)) public priceVotes;
-
+    mapping(address => uint256) public tokensStaked;
+    mapping(address => uint256) public stakingClaimTips;
 
     event FeeUpdated(uint256 currentFeeBps, uint256 newFeeBps);
     event Buy(
@@ -72,13 +89,12 @@ contract CoolToken is
         uint256 winningPrice,
         uint256 totalVotingPower
     );
-
-    modifier notDuringVotingIfVoted() {
-        if (isVotingInProgress && hasVoted[votingNumber][msg.sender]) {
-            revert("Action forbidden for voters during active voting");
-        }
-        _;
-    }
+    event Claimed(
+        address indexed claimer, 
+        address indexed account, 
+        uint256 tokensClaimed, 
+        uint256 ethTip
+    );
 
     constructor() {
         _disableInitializers();
@@ -143,7 +159,6 @@ contract CoolToken is
     function transfer(address to, uint256 amount)
         external
         override
-        notDuringVotingIfVoted
         returns (bool)
     {
         _transfer(msg.sender, to, amount);
@@ -165,8 +180,7 @@ contract CoolToken is
         returns (bool)
     {
         uint256 current = _allowances[msg.sender][spender];
-        require(amount == 0 || current == 0, "Should be set to 0 first");
-
+        if (amount != 0 && current != 0) revert NotEnoughTokens();
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
@@ -175,10 +189,9 @@ contract CoolToken is
     function transferFrom(address from, address to, uint256 amount)
         external
         override
-        notDuringVotingIfVoted
         returns (bool)
     {
-        require(_allowances[from][msg.sender] >= amount, "Insufficient allowance");
+        if (_allowances[from][msg.sender] < amount) revert InsufficientAllowance();
 
         _transfer(from, to, amount);
         unchecked {
@@ -189,10 +202,10 @@ contract CoolToken is
     }
 
     function startVoting() external {
-        require(!isVotingInProgress, "Voting already in progress");
+        if (isVotingInProgress) revert VotingAlreadyInProgress();
 
-        uint256 minToStart = (_totalSupply * 10) / BPS_DENOMINATOR; // 10 bps = 0.1%
-        require(_balances[msg.sender] > minToStart, "Not enough tokens to start voting");
+        uint256 minToStart = (_totalSupply * 10) / BPS_DENOMINATOR;
+        if (_balances[msg.sender] <= minToStart) revert NotEnoughTokensToStartVoting();
 
         isVotingInProgress = true;
         votingNumber += 1;
@@ -204,43 +217,51 @@ contract CoolToken is
         emit VotingStarted(votingNumber, votingStartedTime);
     }
 
-    function vote(uint256 price) external notDuringVotingIfVoted {
-        require(isVotingInProgress, "No active voting");
-        require(
-            block.timestamp <= votingStartedTime + votingTimeLength,
-            "Voting period over"
-        );
-        require(price > 0, "Price must be > 0");
-
-        uint256 currentVoting = votingNumber;
-
-        require(!hasVoted[currentVoting][msg.sender], "Already voted");
+    function vote(uint256 price, uint256 tokensAmount) external payable {
+        if (!isVotingInProgress) revert NoActiveVoting();
+        if (block.timestamp > votingStartedTime + votingTimeLength) revert VotingPeriodOver();
+        if (price == 0) revert PriceMustBeGreaterThanZero();
 
         uint256 balance = _balances[msg.sender];
-        require(balance > 0, "No tokens");
+        if (balance < tokensAmount) revert NotEnoughTokens();
 
-        uint256 minToVote = (_totalSupply * 5) / BPS_DENOMINATOR; // 5 bps = 0.05%
-        require(balance > minToVote, "Not enough tokens to vote");
+        uint256 minToVote = (_totalSupply * 5) / BPS_DENOMINATOR;
+        if (balance <= minToVote) revert NotEnoughTokensToVote();
 
-        hasVoted[currentVoting][msg.sender] = true;
-
-        uint256 newTotalVotesForPrice = priceVotes[currentVoting][price] + balance;
-        priceVotes[currentVoting][price] = newTotalVotesForPrice;
+        _transfer(msg.sender, address(this), tokensAmount);
+        uint256 newTotalVotesForPrice = priceVotes[votingNumber][price] + tokensAmount;
+        priceVotes[votingNumber][price] = newTotalVotesForPrice;
+        tokensStaked[msg.sender] += tokensAmount;
+        
+        stakingClaimTips[msg.sender] += msg.value;
 
         if (newTotalVotesForPrice > leadingPriceVotes) {
             leadingPriceVotes = newTotalVotesForPrice;
             leadingPrice = price;
         }
 
-        emit Voted(msg.sender, currentVoting, price, balance);
+        emit Voted(msg.sender, votingNumber, price, tokensAmount);
     }
 
+    function claim(address account) external nonReentrant {
+        if (isVotingInProgress) revert NoActiveVoting();
+
+        uint256 tokensToClaim = tokensStaked[account];
+        _update(address(this), account, tokensToClaim);
+        tokensStaked[account] = 0;
+
+        uint256 tip = stakingClaimTips[account];
+        if (tip > 0) {
+            stakingClaimTips[account] = 0;
+            (bool sent, ) = msg.sender.call{value: tip}("");
+            if (!sent) revert ETHTransferFailed();
+        }
+            emit Claimed(msg.sender, account, tokensToClaim, tip);
+        }
+
     function endVoting() external {
-        require(isVotingInProgress, "No active voting");
-        require(
-            block.timestamp >= votingStartedTime + votingTimeLength,
-            "Voting still in progress"
-        );
+        if (!isVotingInProgress) revert NoActiveVoting();
+        if (block.timestamp < votingStartedTime + votingTimeLength) revert VotingStillInProgress();
 
         isVotingInProgress = false;
 
@@ -252,22 +273,22 @@ contract CoolToken is
     }
 
     function setFeeBps(uint256 newFeeBps) external onlyOwner {
-        require(newFeeBps <= MAX_FEE_BPS, "Max fee is 10%");
+        if (newFeeBps > MAX_FEE_BPS) revert MaxFeeExceeded();
         emit FeeUpdated(_feeBps, newFeeBps);
         _feeBps = newFeeBps;
     }
 
     function _update(address from, address to, uint256 amount) internal virtual {
-        if (from == address(0)){
+        if (from == address(0)) {
             _totalSupply += amount;
         } else {
-            require(_balances[from] >= amount, "Insufficient balance");
+            if (_balances[from] < amount) revert InsufficientBalance();
             unchecked {
                 _balances[from] -= amount;
             }
         }
 
-        if (to == address(0)){
+        if (to == address(0)) {
             unchecked {
                 _totalSupply -= amount;
             }
@@ -280,21 +301,21 @@ contract CoolToken is
     }
 
     function _transfer(address from, address to, uint256 amount) internal {
-        require(from != address(0) && to != address(0), "Zero address");
+        if (from == address(0) || to == address(0)) revert ZeroAddress();
         _update(from, to, amount);
     }
 
     function _mint(address account, uint256 amount) internal {
-        require(account != address(0), "Zero address");
+        if (account == address(0)) revert ZeroAddress();
         _update(address(0), account, amount);
     }
 
     function _burn(address account, uint256 amount) internal {
-        require(account != address(0), "Zero address");
+        if (account == address(0)) revert ZeroAddress();
         _update(account, address(0), amount);
     }
 
-    function buy() external payable notDuringVotingIfVoted {
+    function buy() external payable {
         uint256 tokensGross = msg.value * (10 ** _decimals) / currentPrice;
         uint256 fee = tokensGross * _feeBps / BPS_DENOMINATOR;
         uint256 tokensNet = tokensGross - fee;
@@ -309,29 +330,28 @@ contract CoolToken is
     function sell(uint256 tokensAmount)
         external
         nonReentrant
-        notDuringVotingIfVoted
     {
-        require(_balances[msg.sender] >= tokensAmount, "Insufficient balance");
-        require(currentPrice > 0, "Price not set");
+        if (_balances[msg.sender] < tokensAmount) revert InsufficientBalance();
+        if (currentPrice == 0) revert PriceNotSet();
 
         uint256 fee = tokensAmount * _feeBps / BPS_DENOMINATOR;
         uint256 tokensNet = tokensAmount - fee;
 
         uint256 ethOut = tokensNet * currentPrice / (10 ** _decimals);
-        require(address(this).balance >= ethOut, "Not enough ETH");
+        if (address(this).balance < ethOut) revert InsufficientBalance();
 
         _transfer(msg.sender, address(this), fee);
         feeTokensAccrued += fee;
         _burn(msg.sender, tokensNet);
 
         (bool sent, ) = msg.sender.call{value: ethOut}("");
-        require(sent, "ETH transfer failed");
+        if (!sent) revert ETHTransferFailed();
 
         emit Sell(msg.sender, tokensAmount, ethOut, fee, currentPrice);
     }
 
     function burnFees() external {
-        require(block.timestamp >= lastFeeBurn + 7 days, "Too early");
+        if (block.timestamp < lastFeeBurn + 7 days) revert TooEarlyToBurnFees();
 
         uint256 toBurn = feeTokensAccrued;
         uint256 bal = _balances[address(this)];

@@ -46,7 +46,7 @@ abstract contract Tradeable is ERC20Base {
     function feeBps() external view returns (uint256) {
         return _feeBps;
     }
-    
+
     function setFeeBps(uint256 newFeeBps) external onlyOwner {
         if (newFeeBps > MAX_FEE_BPS) revert MaxFeeExceeded();
         emit FeeUpdated(_feeBps, newFeeBps);
@@ -55,11 +55,11 @@ abstract contract Tradeable is ERC20Base {
 
     function buy() external payable {
         if (currentPrice == 0) revert PriceNotSet();
-        
+
         uint256 ethIn = msg.value;
         uint256 decimals_ = decimals();
-        uint256 tokensGross = ethIn * (10 ** decimals_) / currentPrice;
-        uint256 fee = tokensGross * _feeBps / BPS_DENOMINATOR;
+        uint256 tokensGross = (ethIn * (10 ** decimals_)) / currentPrice;
+        uint256 fee = (tokensGross * _feeBps) / BPS_DENOMINATOR;
         uint256 tokensNet = tokensGross - fee;
 
         _mint(address(this), fee);
@@ -69,22 +69,19 @@ abstract contract Tradeable is ERC20Base {
         emit Buy(msg.sender, ethIn, tokensNet, fee, currentPrice);
     }
 
-    function sell(uint256 tokensAmount)
-        external
-        nonReentrant
-    {
+    function sell(uint256 tokensAmount) external nonReentrant {
         if (balanceOf(msg.sender) < tokensAmount) revert InsufficientBalance();
         if (currentPrice == 0) revert PriceNotSet();
 
-        uint256 fee = tokensAmount * _feeBps / BPS_DENOMINATOR;
+        uint256 fee = (tokensAmount * _feeBps) / BPS_DENOMINATOR;
         uint256 tokensNet = tokensAmount - fee;
 
-        uint256 ethOut = tokensNet * currentPrice / (10 ** decimals());
+        uint256 ethOut = (tokensNet * currentPrice) / (10 ** decimals());
         if (address(this).balance < ethOut) revert InsufficientBalance();
 
         _transfer(msg.sender, address(this), fee);
         feeTokensAccrued += fee;
-        
+
         _burn(msg.sender, tokensNet);
 
         (bool sent, ) = msg.sender.call{value: ethOut}("");

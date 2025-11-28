@@ -57,51 +57,43 @@ abstract contract ERC20Base is
         return _totalSupply;
     }
 
-    function balanceOf(address account)
-        public
-        view
-        override
-        returns (uint256)
-    {
+    function balanceOf(address account) public view override returns (uint256) {
         return _balances[account];
     }
 
-    function transfer(address to, uint256 amount)
-        public
-        override
-        returns (bool)
-    {
+    function transfer(
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
         _transfer(msg.sender, to, amount);
         return true;
     }
 
-    function allowance(address owner, address spender)
-        public
-        view
-        override
-        returns (uint256)
-    {
+    function allowance(
+        address owner,
+        address spender
+    ) public view override returns (uint256) {
         return _allowances[owner][spender];
     }
 
-    function approve(address spender, uint256 amount)
-        public
-        override
-        returns (bool)
-    {
+    function approve(
+        address spender,
+        uint256 amount
+    ) public override returns (bool) {
         uint256 current = _allowances[msg.sender][spender];
-        if (amount != 0 && current != 0) revert NotEnoughTokens(); 
+        if (amount != 0 && current != 0) revert NotEnoughTokens();
         _allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount)
-        public
-        override
-        returns (bool)
-    {
-        if (_allowances[from][msg.sender] < amount) revert InsufficientAllowance();
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
+        if (_allowances[from][msg.sender] < amount)
+            revert InsufficientAllowance();
 
         _transfer(from, to, amount);
         unchecked {
@@ -111,14 +103,15 @@ abstract contract ERC20Base is
         return true;
     }
 
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        virtual
-        override
-        onlyOwner
-    {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal virtual override onlyOwner {}
 
-    function _update(address from, address to, uint256 amount) internal virtual {
+    function _update(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {
         if (from == address(0)) {
             _totalSupply += amount;
         } else {
@@ -140,7 +133,11 @@ abstract contract ERC20Base is
         emit Transfer(from, to, amount);
     }
 
-    function _transfer(address from, address to, uint256 amount) internal virtual {
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {
         if (from == address(0) || to == address(0)) revert ZeroAddress();
         _update(from, to, amount);
     }

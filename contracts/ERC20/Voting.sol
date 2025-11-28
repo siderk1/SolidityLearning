@@ -12,7 +12,7 @@ abstract contract Voting is Tradeable {
     error NotEnoughTokensToVote();
     error VotingStillInProgress();
 
-    uint256 public votingTimeLength; 
+    uint256 public votingTimeLength;
     bool public isVotingInProgress;
     uint256 public votingNumber;
     uint256 public votingStartedTime;
@@ -37,9 +37,9 @@ abstract contract Voting is Tradeable {
         uint256 totalVotingPower
     );
     event Claimed(
-        address indexed claimer, 
-        address indexed account, 
-        uint256 tokensClaimed, 
+        address indexed claimer,
+        address indexed account,
+        uint256 tokensClaimed,
         uint256 ethTip
     );
 
@@ -52,8 +52,9 @@ abstract contract Voting is Tradeable {
     function startVoting() external {
         if (isVotingInProgress) revert VotingAlreadyInProgress();
 
-        uint256 minToStart = (totalSupply() * 10) / BPS_DENOMINATOR; 
-        if (balanceOf(msg.sender) <= minToStart) revert NotEnoughTokensToStartVoting();
+        uint256 minToStart = (totalSupply() * 10) / BPS_DENOMINATOR;
+        if (balanceOf(msg.sender) <= minToStart)
+            revert NotEnoughTokensToStartVoting();
 
         isVotingInProgress = true;
         votingNumber += 1;
@@ -67,7 +68,8 @@ abstract contract Voting is Tradeable {
 
     function vote(uint256 price, uint256 tokensAmount) external payable {
         if (!isVotingInProgress) revert NoActiveVoting();
-        if (block.timestamp > votingStartedTime + votingTimeLength) revert VotingPeriodOver();
+        if (block.timestamp > votingStartedTime + votingTimeLength)
+            revert VotingPeriodOver();
         if (price == 0) revert PriceMustBeGreaterThanZero();
 
         uint256 balance = balanceOf(msg.sender);
@@ -77,11 +79,12 @@ abstract contract Voting is Tradeable {
         if (balance <= minToVote) revert NotEnoughTokensToVote();
 
         _transfer(msg.sender, address(this), tokensAmount);
-        
-        uint256 newTotalVotesForPrice = priceVotes[votingNumber][price] + tokensAmount;
+
+        uint256 newTotalVotesForPrice = priceVotes[votingNumber][price] +
+            tokensAmount;
         priceVotes[votingNumber][price] = newTotalVotesForPrice;
         tokensStaked[msg.sender] += tokensAmount;
-        
+
         stakingClaimTips[msg.sender] += msg.value;
 
         if (newTotalVotesForPrice > leadingPriceVotes) {
@@ -94,17 +97,18 @@ abstract contract Voting is Tradeable {
 
     function endVoting() external {
         if (!isVotingInProgress) revert NoActiveVoting();
-        if (block.timestamp < votingStartedTime + votingTimeLength) revert VotingStillInProgress();
+        if (block.timestamp < votingStartedTime + votingTimeLength)
+            revert VotingStillInProgress();
 
         isVotingInProgress = false;
 
         if (leadingPriceVotes > 0) {
-            currentPrice = leadingPrice; 
+            currentPrice = leadingPrice;
         }
 
         emit VotingEnded(votingNumber, leadingPrice, leadingPriceVotes);
     }
-    
+
     function claim(address account) external nonReentrant {
         if (isVotingInProgress) revert NoActiveVoting();
 
@@ -118,7 +122,7 @@ abstract contract Voting is Tradeable {
             (bool sent, ) = msg.sender.call{value: tip}("");
             if (!sent) revert ETHTransferFailed();
         }
-        
+
         emit Claimed(msg.sender, account, tokensToClaim, tip);
     }
 }

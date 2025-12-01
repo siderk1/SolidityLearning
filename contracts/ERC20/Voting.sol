@@ -19,7 +19,6 @@ abstract contract Voting is Tradeable {
     uint256 public votingNumber;
     uint256 public votingStartedTime;
 
-
     struct Node {
         uint256 price;
         uint256 votingPower;
@@ -33,9 +32,11 @@ abstract contract Voting is Tradeable {
     // mapping[votingNumber][price] = Node;
     mapping(uint256 => mapping(uint256 => Node)) public pricesNodes;
     // mapping[votingNumber][price][address] = power
-    mapping(uint256 => mapping (uint256 => mapping(address => uint256))) public tokensStakedByVoterOnPrice;
+    mapping(uint256 => mapping(uint256 => mapping(address => uint256)))
+        public tokensStakedByVoterOnPrice;
     // mapping[votingNumber][price][address] = tip
-    mapping(uint256 => mapping (uint256 => mapping(address => uint256))) public voterTipByPrice;
+    mapping(uint256 => mapping(uint256 => mapping(address => uint256)))
+        public voterTipByPrice;
 
     event VotingStarted(uint256 indexed votingNumber, uint256 startTime);
     event Voted(
@@ -73,13 +74,18 @@ abstract contract Voting is Tradeable {
         votingNumber += 1;
         votingStartedTime = block.timestamp;
 
-
         emit VotingStarted(votingNumber, votingStartedTime);
     }
 
-    function vote(uint256 price, uint256 tokensAmount, uint256 prevPrice, uint256 nextPrice) external payable {
+    function vote(
+        uint256 price,
+        uint256 tokensAmount,
+        uint256 prevPrice,
+        uint256 nextPrice
+    ) external payable {
         if (!isVotingInProgress) revert NoActiveVoting();
-        if (block.timestamp > votingStartedTime + votingTimeLength) revert VotingPeriodOver();
+        if (block.timestamp > votingStartedTime + votingTimeLength)
+            revert VotingPeriodOver();
         if (price == 0) revert PriceMustBeGreaterThanZero();
 
         uint256 balance = balanceOf(msg.sender);
@@ -89,11 +95,15 @@ abstract contract Voting is Tradeable {
         if (balance <= minToVote) revert NotEnoughTokensToVote();
 
         _transfer(msg.sender, address(this), tokensAmount);
-        tokensStakedByVoterOnPrice[votingNumber][price][msg.sender] += tokensAmount;
+        tokensStakedByVoterOnPrice[votingNumber][price][
+            msg.sender
+        ] += tokensAmount;
         voterTipByPrice[votingNumber][price][msg.sender] += msg.value;
 
-        uint256 newPower = pricesNodes[votingNumber][price].votingPower + tokensAmount;
-        if (!_isValidNodePosition(price, newPower, prevPrice, nextPrice)) revert InvalidNodePosition();
+        uint256 newPower = pricesNodes[votingNumber][price].votingPower +
+            tokensAmount;
+        if (!_isValidNodePosition(price, newPower, prevPrice, nextPrice))
+            revert InvalidNodePosition();
         _insertNode(price, newPower, prevPrice, nextPrice);
 
         emit Voted(msg.sender, votingNumber, price, tokensAmount);
@@ -105,9 +115,10 @@ abstract contract Voting is Tradeable {
             revert VotingStillInProgress();
 
         isVotingInProgress = false;
-        
+
         uint256 leadingPrice = leadingPrices[votingNumber];
-        uint256 winnerPower = pricesNodes[votingNumber][leadingPrice].votingPower;
+        uint256 winnerPower = pricesNodes[votingNumber][leadingPrice]
+            .votingPower;
         if (leadingPrice > 0) {
             currentPrice = leadingPrice;
         }
@@ -133,9 +144,11 @@ abstract contract Voting is Tradeable {
         uint256 newPower = node.votingPower - tokensAmount;
 
         if (newPower > 0) {
-            if (!_isValidNodePosition(price, newPower, prevPrice, nextPrice)) revert InvalidNodePosition();
+            if (!_isValidNodePosition(price, newPower, prevPrice, nextPrice))
+                revert InvalidNodePosition();
         }
-        tokensStakedByVoterOnPrice[vn][price][msg.sender] = staked - tokensAmount;
+        tokensStakedByVoterOnPrice[vn][price][msg.sender] =
+            staked - tokensAmount;
 
         if (newPower == 0) {
             uint256 oldPrev = node.prevPrice;
@@ -152,21 +165,27 @@ abstract contract Voting is Tradeable {
             }
 
             delete pricesNodes[vn][price];
-
         } else {
             _insertNode(price, newPower, prevPrice, nextPrice);
         }
         _transfer(address(this), msg.sender, tokensAmount);
     }
 
-
-    function claim(address account, uint256 votingRound, uint256 price) external nonReentrant {
+    function claim(
+        address account,
+        uint256 votingRound,
+        uint256 price
+    ) external nonReentrant {
         if (isVotingInProgress) revert CannotClaimDuringVoting();
 
-        uint256 tokensToClaim = tokensStakedByVoterOnPrice[votingRound][price][account];
+        uint256 tokensToClaim = tokensStakedByVoterOnPrice[votingRound][price][
+            account
+        ];
         _transfer(address(this), account, tokensToClaim);
 
-        tokensStakedByVoterOnPrice[votingRound][price][account] -= tokensToClaim;
+        tokensStakedByVoterOnPrice[votingRound][price][
+            account
+        ] -= tokensToClaim;
 
         uint256 tip = voterTipByPrice[votingRound][price][account];
         if (tip > 0) {
@@ -184,7 +203,6 @@ abstract contract Voting is Tradeable {
         uint256 prevPrice,
         uint256 nextPrice
     ) private view returns (bool) {
-
         uint256 vn = votingNumber;
 
         if (price == prevPrice || price == nextPrice) return false;
@@ -210,7 +228,9 @@ abstract contract Voting is Tradeable {
         }
 
         // prevPower >= newPower >= nextPower
-        uint256 prevPower = prevPrice == 0 ? type(uint256).max : prev.votingPower;
+        uint256 prevPower = prevPrice == 0
+            ? type(uint256).max
+            : prev.votingPower;
         uint256 nextPower = nextPrice == 0 ? 0 : next.votingPower;
 
         if (prevPower < newPricePower) return false;
@@ -263,7 +283,7 @@ abstract contract Voting is Tradeable {
         if (prevPrice != 0) {
             pricesNodes[vn][prevPrice].nextPrice = price;
         } else {
-            leadingPrices[vn] = price; 
+            leadingPrices[vn] = price;
         }
 
         if (nextPrice != 0) {
@@ -271,4 +291,3 @@ abstract contract Voting is Tradeable {
         }
     }
 }
-

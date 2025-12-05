@@ -30,7 +30,10 @@ library VotingLinkedListLib {
     /// @param self List storage pointer
     /// @param price Price key to check
     /// @return True if node exists (power != 0)
-    function contains(List storage self, uint256 price) internal view returns (bool) {
+    function contains(
+        List storage self,
+        uint256 price
+    ) internal view returns (bool) {
         return self.nodes[price].power != 0;
     }
 
@@ -52,7 +55,10 @@ library VotingLinkedListLib {
     /// @param self List storage pointer
     /// @param price Node price key
     /// @return Power of the node (0 if not present)
-    function getPower(List storage self, uint256 price) internal view returns (uint256) {
+    function getPower(
+        List storage self,
+        uint256 price
+    ) internal view returns (uint256) {
         return self.nodes[price].power;
     }
 
@@ -73,7 +79,12 @@ library VotingLinkedListLib {
         if (contains(self, price)) revert NodeExists();
         if (power == 0) revert PowerCanNotBeZero();
 
-        (uint256 prevPrice, uint256 nextPrice) = findInsertPosition(self, power, prevHint, nextHint);
+        (uint256 prevPrice, uint256 nextPrice) = findInsertPosition(
+            self,
+            power,
+            prevHint,
+            nextHint
+        );
 
         _link(self, price, power, prevPrice, nextPrice);
         self.size++;
@@ -97,7 +108,12 @@ library VotingLinkedListLib {
         if (power == 0) revert PowerCanNotBeZero();
 
         _unlink(self, price);
-        (uint256 prevPrice, uint256 nextPrice) = findInsertPosition(self, power, prevHint, nextHint);
+        (uint256 prevPrice, uint256 nextPrice) = findInsertPosition(
+            self,
+            power,
+            prevHint,
+            nextHint
+        );
         _link(self, price, power, prevPrice, nextPrice);
     }
 
@@ -205,7 +221,10 @@ library VotingLinkedListLib {
         else {
             Node memory prev = self.nodes[prevPrice];
             Node memory next = self.nodes[nextPrice];
-            return prev.nextPrice == nextPrice && prev.power >= power && next.power <= power;
+            return
+                prev.nextPrice == nextPrice &&
+                prev.power >= power &&
+                next.power <= power;
         }
     }
 

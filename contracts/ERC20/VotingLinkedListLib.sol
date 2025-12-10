@@ -62,6 +62,13 @@ library VotingLinkedListLib {
         return self.nodes[price].power;
     }
 
+    function getNode(
+        List storage self,
+        uint256 price
+    ) internal view returns (Node memory) {
+        return self.nodes[price];
+    }
+
     /// @notice Insert a new node (sorted by power) into the list
     /// @dev Reverts if node exists or power == 0. Hints may be provided to save gas.
     /// @param self List storage pointer
@@ -243,8 +250,6 @@ library VotingLinkedListLib {
 
         return (prevPrice, nextPrice);
     }
-
-    // -------- linking / unlinking nodes --------
 
     /// @dev Link a new node into the list; does not update size.
     function _link(

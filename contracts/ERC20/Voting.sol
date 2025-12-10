@@ -66,6 +66,13 @@ abstract contract Voting is Tradeable {
         votingTimeLength = votingTimeLength_;
     }
 
+    function getNode(
+        uint256 vn,
+        uint256 price
+    ) external view returns (VLL.Node memory) {
+        return votingLists[vn].getNode(price);
+    }
+
     /// @notice Start a new voting round
     /// @dev Caller must hold more than configured fraction of totalSupply (minToStart).
     /// Emits VotingStarted.

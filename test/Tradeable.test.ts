@@ -1,11 +1,12 @@
 import { expect } from "chai";
 import { network } from "hardhat";
 import { CoolToken } from "../types/ethers-contracts/index.js";
-import { deployFixture, TOKEN_NAME, SYMBOL } from "./fixtures.js";
-import { ContractTransactionResponse } from "ethers";
+import { deployFixture } from "./fixtures.js";
+import { HardhatEthers } from "@nomicfoundation/hardhat-ethers/types";
+import { NetworkHelpers } from "@nomicfoundation/hardhat-network-helpers/types";
 
-let _ethers: any;
-let _networkHelpers: any;
+let _ethers: HardhatEthers;
+let _networkHelpers: NetworkHelpers;
 
 function localFixture() {
   return deployFixture(_ethers);

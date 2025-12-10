@@ -1,57 +1,84 @@
-# Sample Hardhat 3 Beta Project (`node:test` and `viem`)
+## Sūrya's Description Report
 
-This project showcases a Hardhat 3 Beta project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
+### Files Description Table
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+| File Name                                                | SHA-1 Hash                               |
+| -------------------------------------------------------- | ---------------------------------------- |
+| SolidityLearning\contracts\ERC20\BasicProxy.sol          | c5b953de6a22df2d983f5bbe7ed97d27c72ada07 |
+| SolidityLearning\contracts\ERC20\CoolToken.sol           | 13b6705ea79f91606b197e35badff1636ff5a4a0 |
+| SolidityLearning\contracts\ERC20\ERC20Base.sol           | b401d998ea3522b33fc0e9fc60eda5456b5a5bc1 |
+| SolidityLearning\contracts\ERC20\Tradeable.sol           | 5b50d2f2e88cce9e25cfeda52559a5deb1056f4a |
+| SolidityLearning\contracts\ERC20\Voting.sol              | 58f62176f2a71d89e9f71dd2b263229afa7ccf72 |
+| SolidityLearning\contracts\ERC20\VotingLinkedListLib.sol | 9bad7e1e2d9b451ee4a8f0762d0f7f2ef5d6cfe8 |
 
-## Project Overview
+### Contracts Description Table
 
-This example project includes:
+|        Contract         |        Type        |                                         Bases                                          |                |                  |
+| :---------------------: | :----------------: | :------------------------------------------------------------------------------------: | :------------: | :--------------: |
+|            └            | **Function Name**  |                                     **Visibility**                                     | **Mutability** |  **Modifiers**   |
+|                         |                    |                                                                                        |                |                  |
+|     **BasicProxy**      |   Implementation   |                                      ERC1967Proxy                                      |                |                  |
+|            └            |   <Constructor>    |                                       Public ❗️                                        |       🛑       |   ERC1967Proxy   |
+|                         |                    |                                                                                        |                |                  |
+|      **CoolToken**      |   Implementation   |                                         Voting                                         |                |                  |
+|            └            |   <Constructor>    |                                       Public ❗️                                        |       🛑       |       NO❗️       |
+|            └            |     initialize     |                                       Public ❗️                                        |       🛑       |   initializer    |
+|            └            | \_authorizeUpgrade |                                      Internal 🔒                                       |       🛑       |    onlyOwner     |
+|                         |                    |                                                                                        |                |                  |
+|      **ERC20Base**      |   Implementation   | Initializable, IERC20, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable |                |                  |
+|            └            | \_\_ERC20Base_init |                                      Internal 🔒                                       |       🛑       | onlyInitializing |
+|            └            |        name        |                                       Public ❗️                                        |                |       NO❗️       |
+|            └            |       symbol       |                                       Public ❗️                                        |                |       NO❗️       |
+|            └            |      decimals      |                                       Public ❗️                                        |                |       NO❗️       |
+|            └            |    totalSupply     |                                       Public ❗️                                        |                |       NO❗️       |
+|            └            |     balanceOf      |                                       Public ❗️                                        |                |       NO❗️       |
+|            └            |      transfer      |                                       Public ❗️                                        |       🛑       |       NO❗️       |
+|            └            |     allowance      |                                       Public ❗️                                        |                |       NO❗️       |
+|            └            |      approve       |                                       Public ❗️                                        |       🛑       |       NO❗️       |
+|            └            |    transferFrom    |                                       Public ❗️                                        |       🛑       |       NO❗️       |
+|            └            | \_authorizeUpgrade |                                      Internal 🔒                                       |       🛑       |    onlyOwner     |
+|            └            |      \_update      |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            |     \_transfer     |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            |       \_mint       |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            |       \_burn       |                                      Internal 🔒                                       |       🛑       |                  |
+|                         |                    |                                                                                        |                |                  |
+|      **Tradeable**      |   Implementation   |                                       ERC20Base                                        |                |                  |
+|            └            | \_\_Tradeable_init |                                      Internal 🔒                                       |       🛑       | onlyInitializing |
+|            └            |       feeBps       |                                      External ❗️                                       |                |       NO❗️       |
+|            └            |     setFeeBps      |                                      External ❗️                                       |       🛑       |    onlyOwner     |
+|            └            |        buy         |                                      External ❗️                                       |       💵       |       NO❗️       |
+|            └            |        sell        |                                      External ❗️                                       |       🛑       |   nonReentrant   |
+|            └            |      burnFees      |                                      External ❗️                                       |       🛑       |       NO❗️       |
+|                         |                    |                                                                                        |                |                  |
+|       **Voting**        |   Implementation   |                                       Tradeable                                        |                |                  |
+|            └            |  \_\_Voting_init   |                                      Internal 🔒                                       |       🛑       | onlyInitializing |
+|            └            |      getNode       |                                      External ❗️                                       |                |       NO❗️       |
+|            └            |    startVoting     |                                      External ❗️                                       |       🛑       |       NO❗️       |
+|            └            |        vote        |                                      External ❗️                                       |       💵       |       NO❗️       |
+|            └            |     endVoting      |                                      External ❗️                                       |       🛑       |       NO❗️       |
+|            └            |      withdraw      |                                      External ❗️                                       |       🛑       |   nonReentrant   |
+|            └            |       claim        |                                      External ❗️                                       |       🛑       |   nonReentrant   |
+|                         |                    |                                                                                        |                |                  |
+| **VotingLinkedListLib** |      Library       |                                                                                        |                |                  |
+|            └            |      contains      |                                      Internal 🔒                                       |                |                  |
+|            └            |      isEmpty       |                                      Internal 🔒                                       |                |                  |
+|            └            |   getWinnerPrice   |                                      Internal 🔒                                       |                |                  |
+|            └            |      getPower      |                                      Internal 🔒                                       |                |                  |
+|            └            |      getNode       |                                      Internal 🔒                                       |                |                  |
+|            └            |       insert       |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            |       update       |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            |       remove       |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            | findInsertPosition |                                      Internal 🔒                                       |                |                  |
+|            └            |   \_descendList    |                                      Internal 🔒                                       |                |                  |
+|            └            |    \_ascendList    |                                      Internal 🔒                                       |                |                  |
+|            └            |   \_isValidPlace   |                                      Internal 🔒                                       |                |                  |
+|            └            |   \_findFromHead   |                                      Internal 🔒                                       |                |                  |
+|            └            |       \_link       |                                      Internal 🔒                                       |       🛑       |                  |
+|            └            |      \_unlink      |                                      Internal 🔒                                       |       🛑       |                  |
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+### Legend
 
-## Usage
-
-### Running Tests
-
-To run all the tests in the project, execute the following command:
-
-```shell
-npx hardhat test
-```
-
-You can also selectively run the Solidity or `node:test` tests:
-
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
-```
-
-### Make a deployment to Sepolia
-
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
-
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
-
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
-
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
-
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
-
-After setting the variable, you can run the deployment with the Sepolia network:
-
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+| Symbol | Meaning                   |
+| :----: | ------------------------- |
+|   🛑   | Function can modify state |
+|   💵   | Function is payable       |

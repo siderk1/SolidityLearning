@@ -2,10 +2,8 @@ import { expect } from "chai";
 import { network } from "hardhat";
 import { CoolToken } from "../types/ethers-contracts/index.js";
 import { deployFixture } from "./fixtures.js";
-import { start } from "repl";
 import { HardhatEthers } from "@nomicfoundation/hardhat-ethers/types";
 import { NetworkHelpers } from "@nomicfoundation/hardhat-network-helpers/types";
-import { freemem } from "os";
 
 let _ethers: HardhatEthers;
 let _networkHelpers: NetworkHelpers;

@@ -21,3 +21,6 @@
 
 # Hardhat ignition deployments
 /ignition/deployments
+
+#typechain types
+/types

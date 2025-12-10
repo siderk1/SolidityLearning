@@ -2,8 +2,14 @@
 pragma solidity ^0.8.0;
 
 import "./Tradeable.sol";
+import {VotingLinkedListLib as VLL} from "./VotingLinkedListLib.sol";
 
+/// @title Voting (price discovery)
+/// @notice Manages voting rounds where token holders stake tokens to vote for a price.
+/// @dev Uses an internal sorted linked-list (library) to pick the leading price per round.
 abstract contract Voting is Tradeable {
+    using VLL for VLL.List;
+
     error VotingAlreadyInProgress();
     error NotEnoughTokensToStartVoting();
     error NoActiveVoting();
@@ -14,27 +20,21 @@ abstract contract Voting is Tradeable {
     error InvalidNodePosition();
     error CannotClaimDuringVoting();
 
+    /// @notice Duration of a voting round in seconds
     uint256 public votingTimeLength;
+    /// @notice Whether a voting round is currently active
     bool public isVotingInProgress;
+    /// @notice Counter of voting rounds (starts at 0)
     uint256 public votingNumber;
+    /// @notice Timestamp when the current voting round started
     uint256 public votingStartedTime;
 
-    struct Node {
-        uint256 price;
-        uint256 votingPower;
-        uint256 prevPrice;
-        uint256 nextPrice;
-        bool exists;
-    }
-
-    // mapping[votingNumber] = leadingPrice
-    mapping(uint256 => uint256) public leadingPrices;
-    // mapping[votingNumber][price] = Node;
-    mapping(uint256 => mapping(uint256 => Node)) public pricesNodes;
-    // mapping[votingNumber][price][address] = power
+    /// @notice Mapping from votingNumber to the internal linked-list for that round
+    mapping(uint256 => VLL.List) public votingLists;
+    /// @notice mapping[votingNumber][price][address] = tokens staked by voter on that price
     mapping(uint256 => mapping(uint256 => mapping(address => uint256)))
         public tokensStakedByVoterOnPrice;
-    // mapping[votingNumber][price][address] = tip
+    /// @notice mapping[votingNumber][price][address] = ETH tip provided by voter
     mapping(uint256 => mapping(uint256 => mapping(address => uint256)))
         public voterTipByPrice;
 
@@ -57,12 +57,25 @@ abstract contract Voting is Tradeable {
         uint256 ethTip
     );
 
+    /// @notice Initialize voting parameters
+    /// @dev Called from initializer of the inheriting contract.
+    /// @param votingTimeLength_ Length of each voting round in seconds
     function __Voting_init(
         uint256 votingTimeLength_
     ) internal onlyInitializing {
         votingTimeLength = votingTimeLength_;
     }
 
+    function getNode(
+        uint256 vn,
+        uint256 price
+    ) external view returns (VLL.Node memory) {
+        return votingLists[vn].getNode(price);
+    }
+
+    /// @notice Start a new voting round
+    /// @dev Caller must hold more than configured fraction of totalSupply (minToStart).
+    /// Emits VotingStarted.
     function startVoting() external {
         if (isVotingInProgress) revert VotingAlreadyInProgress();
 
@@ -77,11 +90,18 @@ abstract contract Voting is Tradeable {
         emit VotingStarted(votingNumber, votingStartedTime);
     }
 
+    /// @notice Stake tokens and vote for `price` during an active voting round
+    /// @dev Caller transfers `tokensAmount` to this contract. Accepts an ETH tip via msg.value.
+    /// Hints (prevPriceHint/nextPriceHint) are optional gas optimizations for list insertion.
+    /// @param price Price candidate (must be > 0)
+    /// @param tokensAmount Amount of tokens to stake for this price
+    /// @param prevPriceHint Hint for previous node price (0 if none)
+    /// @param nextPriceHint Hint for next node price (0 if none)
     function vote(
         uint256 price,
         uint256 tokensAmount,
-        uint256 prevPrice,
-        uint256 nextPrice
+        uint256 prevPriceHint,
+        uint256 nextPriceHint
     ) external payable {
         if (!isVotingInProgress) revert NoActiveVoting();
         if (block.timestamp > votingStartedTime + votingTimeLength)
@@ -94,21 +114,30 @@ abstract contract Voting is Tradeable {
         uint256 minToVote = (totalSupply() * 5) / BPS_DENOMINATOR;
         if (balance <= minToVote) revert NotEnoughTokensToVote();
 
+        if (tokensAmount == 0) revert NotEnoughTokens();
+
         _transfer(msg.sender, address(this), tokensAmount);
         tokensStakedByVoterOnPrice[votingNumber][price][
             msg.sender
         ] += tokensAmount;
         voterTipByPrice[votingNumber][price][msg.sender] += msg.value;
 
-        uint256 newPower = pricesNodes[votingNumber][price].votingPower +
-            tokensAmount;
-        if (!_isValidNodePosition(price, newPower, prevPrice, nextPrice))
-            revert InvalidNodePosition();
-        _insertNode(price, newPower, prevPrice, nextPrice);
+        VLL.List storage list = votingLists[votingNumber];
+        uint256 prevPower = list.getPower(price);
+        uint256 newPower = prevPower + tokensAmount;
+
+        if (list.contains(price)) {
+            list.update(price, newPower, prevPriceHint, nextPriceHint);
+        } else {
+            list.insert(price, newPower, prevPriceHint, nextPriceHint);
+        }
 
         emit Voted(msg.sender, votingNumber, price, tokensAmount);
     }
 
+    /// @notice End the current voting round and set `currentPrice` to the winning price
+    /// @dev Can be called by anyone after the voting period has elapsed.
+    /// Emits VotingEnded.
     function endVoting() external {
         if (!isVotingInProgress) revert NoActiveVoting();
         if (block.timestamp < votingStartedTime + votingTimeLength)
@@ -116,61 +145,57 @@ abstract contract Voting is Tradeable {
 
         isVotingInProgress = false;
 
-        uint256 leadingPrice = leadingPrices[votingNumber];
-        uint256 winnerPower = pricesNodes[votingNumber][leadingPrice]
-            .votingPower;
+        VLL.List storage list = votingLists[votingNumber];
+        uint256 leadingPrice = list.getWinnerPrice();
+        uint256 winnerPower = 0;
         if (leadingPrice > 0) {
+            winnerPower = list.getPower(leadingPrice);
             currentPrice = leadingPrice;
         }
 
         emit VotingEnded(votingNumber, leadingPrice, winnerPower);
     }
 
+    /// @notice Withdraw staked tokens from a price node of the most recent round
+    /// @dev Uses hints to reposition or remove the node after withdrawal.
+    /// @param price Price node to withdraw from
+    /// @param tokensAmount Amount of tokens to withdraw (must be <= staked)
+    /// @param prevPriceHint Hint for previous node price (0 if none)
+    /// @param nextPriceHint Hint for next node price (0 if none)
     function withdraw(
         uint256 price,
         uint256 tokensAmount,
-        uint256 prevPrice,
-        uint256 nextPrice
+        uint256 prevPriceHint,
+        uint256 nextPriceHint
     ) external nonReentrant {
         uint256 vn = votingNumber;
 
         uint256 staked = tokensStakedByVoterOnPrice[vn][price][msg.sender];
         if (staked < tokensAmount) revert NotEnoughTokens();
 
-        Node storage node = pricesNodes[vn][price];
-        if (!node.exists) revert InvalidNodePosition();
+        VLL.List storage list = votingLists[vn];
+        if (!list.contains(price)) revert InvalidNodePosition();
 
-        if (node.votingPower < tokensAmount) revert InvalidNodePosition();
-        uint256 newPower = node.votingPower - tokensAmount;
+        uint256 nodePower = list.getPower(price);
+        if (nodePower < tokensAmount) revert InvalidNodePosition();
+
+        uint256 newPower = nodePower - tokensAmount;
 
         if (newPower > 0) {
-            if (!_isValidNodePosition(price, newPower, prevPrice, nextPrice))
-                revert InvalidNodePosition();
+            list.update(price, newPower, prevPriceHint, nextPriceHint);
+        } else {
+            list.remove(price);
         }
         tokensStakedByVoterOnPrice[vn][price][msg.sender] =
             staked - tokensAmount;
-
-        if (newPower == 0) {
-            uint256 oldPrev = node.prevPrice;
-            uint256 oldNext = node.nextPrice;
-
-            if (oldPrev != 0) {
-                pricesNodes[vn][oldPrev].nextPrice = oldNext;
-            } else {
-                leadingPrices[vn] = oldNext;
-            }
-
-            if (oldNext != 0) {
-                pricesNodes[vn][oldNext].prevPrice = oldPrev;
-            }
-
-            delete pricesNodes[vn][price];
-        } else {
-            _insertNode(price, newPower, prevPrice, nextPrice);
-        }
         _transfer(address(this), msg.sender, tokensAmount);
     }
 
+    /// @notice Claim staked tokens and optional ETH tip from a finished voting round
+    /// @dev Can be called by anyone for `account`. If a tip exists it is sent to the caller.
+    /// @param account Account whose staked tokens and tip are claimed
+    /// @param votingRound Voting round index to claim from
+    /// @param price Price node to claim for
     function claim(
         address account,
         uint256 votingRound,
@@ -195,99 +220,5 @@ abstract contract Voting is Tradeable {
         }
 
         emit Claimed(msg.sender, account, tokensToClaim, tip);
-    }
-
-    function _isValidNodePosition(
-        uint256 price,
-        uint256 newPricePower,
-        uint256 prevPrice,
-        uint256 nextPrice
-    ) private view returns (bool) {
-        uint256 vn = votingNumber;
-
-        if (price == prevPrice || price == nextPrice) return false;
-
-        Node memory prev = pricesNodes[vn][prevPrice];
-        Node memory next = pricesNodes[vn][nextPrice];
-        uint256 currentLeadingPrice = leadingPrices[vn];
-
-        // prev and next prices must exist
-        if (prevPrice != 0 && !prev.exists) return false;
-        if (nextPrice != 0 && !next.exists) return false;
-
-        // links check
-        if (prevPrice != 0) {
-            if (prev.nextPrice != nextPrice) return false;
-        } else {
-            // prev = 0 => head insertion => next must be current head
-            if (nextPrice != currentLeadingPrice) return false;
-        }
-
-        if (nextPrice != 0) {
-            if (next.prevPrice != prevPrice) return false;
-        }
-
-        // prevPower >= newPower >= nextPower
-        uint256 prevPower = prevPrice == 0
-            ? type(uint256).max
-            : prev.votingPower;
-        uint256 nextPower = nextPrice == 0 ? 0 : next.votingPower;
-
-        if (prevPower < newPricePower) return false;
-        if (nextPower > newPricePower) return false;
-
-        // Tie-break: price desc
-        if (prevPrice != 0 && newPricePower == prevPower) {
-            if (prevPrice < price) return false;
-        }
-
-        if (nextPrice != 0 && newPricePower == nextPower) {
-            if (price < nextPrice) return false;
-        }
-
-        return true;
-    }
-
-    function _insertNode(
-        uint256 price,
-        uint256 newPricePower,
-        uint256 prevPrice,
-        uint256 nextPrice
-    ) private {
-        uint256 vn = votingNumber;
-
-        Node storage node = pricesNodes[vn][price];
-
-        if (node.exists) {
-            uint256 oldPrev = node.prevPrice;
-            uint256 oldNext = node.nextPrice;
-
-            if (oldPrev != 0) {
-                pricesNodes[vn][oldPrev].nextPrice = oldNext;
-            } else {
-                leadingPrices[vn] = oldNext;
-            }
-
-            if (oldNext != 0) {
-                pricesNodes[vn][oldNext].prevPrice = oldPrev;
-            }
-        } else {
-            node.exists = true;
-            node.price = price;
-        }
-
-        node.votingPower = newPricePower;
-        node.prevPrice = prevPrice;
-        node.nextPrice = nextPrice;
-
-        if (prevPrice != 0) {
-            pricesNodes[vn][prevPrice].nextPrice = price;
-        } else {
-            leadingPrices[vn] = price;
-        }
-
-        if (nextPrice != 0) {
-            pricesNodes[vn][nextPrice].prevPrice = price;
-        }
     }
 }

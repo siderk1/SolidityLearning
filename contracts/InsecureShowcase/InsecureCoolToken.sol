@@ -1,25 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./Voting.sol";
+import "./InsecureVoting.sol";
 
-/// @title CoolToken
-/// @notice Upgradeable ERC20 token with trading and on-chain price discovery voting.
-/// @dev Composes ERC20Base, Tradeable and Voting. Uses initializer pattern (UUPS). Constructor disables initializers.
-contract CoolToken is Voting {
-    /// @dev Disable initializers for implementation contract.
+
+contract InsecureCoolToken is InsecureVoting {
     constructor() {
         _disableInitializers();
     }
-
-    /// @notice Initialize the token and modules (callable once via proxy).
-    /// @dev Must be called on the proxy. Initializes ERC20Base, Tradeable and Voting modules.
-    /// @param name_ Token name.
-    /// @param symbol_ Token symbol.
-    /// @param votingTimeLength_ Voting round length.
-    /// @param currentPrice_ Initial price.
-    /// @param feeBps_ Initial fee in basis points.
-    /// @param initialOwner Owner address for upgradeability and admin actions.
+    
     function initialize(
         string memory name_,
         string memory symbol_,

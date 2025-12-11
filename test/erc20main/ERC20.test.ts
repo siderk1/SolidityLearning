@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import { CoolToken } from "../types/ethers-contracts/index.js";
+import { CoolToken } from "../../types/ethers-contracts/index.js";
 import { deployFixture, TOKEN_NAME, SYMBOL } from "./fixtures.js";
 import { HardhatEthers } from "@nomicfoundation/hardhat-ethers/types";
 import { NetworkHelpers } from "@nomicfoundation/hardhat-network-helpers/types";

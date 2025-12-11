@@ -3,7 +3,7 @@ import {
   CoolToken,
   CoolToken__factory,
   BasicProxy__factory,
-} from "../types/ethers-contracts/index.js";
+} from "../../types/ethers-contracts/index.js";
 
 export const TOKEN_NAME: string = "CoolToken";
 export const SYMBOL: string = "CT";

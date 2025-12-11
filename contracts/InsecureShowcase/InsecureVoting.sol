@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./Tradeable.sol";
-import {VotingLinkedListLib as VLL} from "./VotingLinkedListLib.sol";
+import "../ERC20/Tradeable.sol";
+import { VotingLinkedListLib as VLL} from "../ERC20/VotingLinkedListLib.sol";
 
 /// @title Voting (price discovery)
 /// @notice Manages voting rounds where token holders stake tokens to vote for a price.
 /// @dev Uses an internal sorted linked-list (library) to pick the leading price per round.
-abstract contract Voting is Tradeable {
+abstract contract InsecureVoting is Tradeable {
     using VLL for VLL.List;
 
     error VotingAlreadyInProgress();
@@ -200,7 +200,7 @@ abstract contract Voting is Tradeable {
         address account,
         uint256 votingRound,
         uint256 price
-    ) external nonReentrant {
+    ) external {
         if (isVotingInProgress) revert CannotClaimDuringVoting();
 
         uint256 tokensToClaim = tokensStakedByVoterOnPrice[votingRound][price][
@@ -210,13 +210,13 @@ abstract contract Voting is Tradeable {
 
         tokensStakedByVoterOnPrice[votingRound][price][
             account
-        ] -= tokensToClaim;
+        ] = 0;
 
         uint256 tip = voterTipByPrice[votingRound][price][account];
         if (tip > 0) {
-            voterTipByPrice[votingRound][price][account] -= tip;
             (bool sent, ) = msg.sender.call{value: tip}("");
             if (!sent) revert ETHTransferFailed();
+            voterTipByPrice[votingRound][price][account] = 0;
         }
 
         emit Claimed(msg.sender, account, tokensToClaim, tip);

